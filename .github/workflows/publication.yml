@@ -1,0 +1,54 @@
+name: Publication Ma Réserve
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'build/web/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  publication:
+    name: Publier le site déjà compilé
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v6
+
+      - name: Vérifier les fichiers Flutter Web
+        shell: bash
+        run: |
+          if [ ! -f build/web/index.html ]; then
+            echo "ERREUR : build/web/index.html est absent."
+            echo "Lance localement : flutter build web --release --base-href /ma-reserve/"
+            echo "Puis ajoute le dossier avec : git add -f build/web"
+            exit 1
+          fi
+          touch build/web/.nojekyll
+          echo "Fichiers Web trouvés :"
+          find build/web -maxdepth 2 -type f | head -40
+
+      - name: Configurer GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Préparer les fichiers à publier
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: build/web
+
+      - name: Publier sur GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
