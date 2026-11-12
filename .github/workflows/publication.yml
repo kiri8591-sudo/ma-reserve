@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'build/web/**'
+      - '.github/workflows/publication.yml'
   workflow_dispatch:
 
 permissions:
@@ -15,7 +16,7 @@ permissions:
 
 concurrency:
   group: github-pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   publication:
@@ -24,6 +25,7 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
       - name: Récupérer le dépôt
         uses: actions/checkout@v6
@@ -31,24 +33,44 @@ jobs:
       - name: Vérifier les fichiers Flutter Web
         shell: bash
         run: |
-          if [ ! -f build/web/index.html ]; then
-            echo "ERREUR : build/web/index.html est absent."
-            echo "Lance localement : flutter build web --release --base-href /ma-reserve/"
-            echo "Puis ajoute le dossier avec : git add -f build/web"
+          set -euo pipefail
+          if [ ! -s build/web/index.html ]; then
+            echo "ERREUR : build/web/index.html est absent ou vide."
+            echo "Sur le PC, exécute : flutter build web --release --base-href \"/ma-reserve/\""
+            echo "Puis envoie les fichiers : git add -f build/web && git commit && git push origin main"
             exit 1
           fi
           touch build/web/.nojekyll
-          echo "Fichiers Web trouvés :"
-          find build/web -maxdepth 2 -type f | head -40
+          echo "Index trouvé : $(wc -c < build/web/index.html) octets"
+          echo "Nombre de fichiers : $(find build/web -type f | wc -l)"
+          echo "Aperçu :"
+          find build/web -maxdepth 2 -type f | sort | head -50
 
       - name: Configurer GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Préparer les fichiers à publier
+      - name: Envoyer l'artefact GitHub Pages
+        id: upload_pages
         uses: actions/upload-pages-artifact@v4
         with:
-          path: build/web
+          name: github-pages
+          path: build/web/
+          retention-days: 1
+
+      - name: Vérifier que l'artefact a bien été créé
+        shell: bash
+        env:
+          PAGES_ARTIFACT_ID: ${{ steps.upload_pages.outputs.artifact_id }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PAGES_ARTIFACT_ID}" ]; then
+            echo "ERREUR : upload-pages-artifact n'a retourné aucun artifact_id."
+            exit 1
+          fi
+          echo "Artefact GitHub Pages créé : ${PAGES_ARTIFACT_ID}"
 
       - name: Publier sur GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages
